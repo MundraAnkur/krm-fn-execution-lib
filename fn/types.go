@@ -5,6 +5,7 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/fn/framework"
 )
 
+//ResourceList is a Kubernetes list type used as the output data format in the Functions execution
 type ResourceList struct {
 	// Items is the ResourceList.items input and output value.
 	//
@@ -24,11 +25,13 @@ type ResourceList struct {
 	// Results is ResourceList.results output value.
 	// Validating functions can optionally use this field to communicate structured
 	// validation error data to downstream functions.
-	Results framework.Results
+	Results map[string]framework.Result
 }
 
 // Function specifies a KRM function to run.
 type Function struct {
+	// Name is the name of the function.
+	Name string
 	// `Image` specifies the function container image.
 	//	image: gcr.io/kpt-fn/set-labels
 	Image string `yaml:"image,omitempty" json:"image,omitempty"`
@@ -44,14 +47,25 @@ type Function struct {
 	ConfigMap map[string]string `yaml:"configMap,omitempty" json:"configMap,omitempty"`
 }
 
+// RunnerBuilder is a executeFn builder that can be used to build a FunctionRunner.
 type RunnerBuilder interface {
+	// WithInput adds raw input to the builder.
 	WithInput([]byte) RunnerBuilder
+
+	// WithInputs adds runtime.objects as the input resource.
 	WithInputs(...runtime.Object) RunnerBuilder
+
+	// WithFunctions provide a list of functions to run.
 	WithFunctions(...Function) RunnerBuilder
+
+	// WhereExecWorkingDir specifies which working directory an exec function should run in.
 	WhereExecWorkingDir(string) RunnerBuilder
+
+	// Build builds the runner with the provided options.
 	Build() (FunctionRunner, error)
 }
 
+// FunctionRunner is a runner that can execute the functions.
 type FunctionRunner interface {
 	Execute() (ResourceList, error)
 }

@@ -1,7 +1,6 @@
 package fn
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -80,18 +79,6 @@ spec:
         ports:
         - containerPort: 80`
 
-func TestExecuteFn_AddInput(t *testing.T) {
-	executeFn := executeFn{}
-	err := executeFn.addInput([]byte(exampleService))
-	err = executeFn.addInput([]byte(exampleDeployment))
-	if err != nil {
-		t.Errorf("Unexpected Error: %v", err)
-	}
-	var expected *bytes.Buffer
-	expected.WriteString(exampleService + itemSeparator + exampleDeployment)
-	assert.EqualValues(t, expected, executeFn.input)
-}
-
 func TestExecuteFn_AddFunction(t *testing.T) {
 	executeFn := executeFn{}
 	configMap := make(map[string]string)
@@ -99,6 +86,7 @@ func TestExecuteFn_AddFunction(t *testing.T) {
 	configMap["app-name"] = "my-app"
 
 	function := Function{
+		Name:      "Example Function",
 		Image:     "example.com/my-image:v0.1",
 		ConfigMap: configMap,
 	}
@@ -120,18 +108,7 @@ func TestExecuteFn_Execute(t *testing.T) {
 		t.Errorf("Unexpected Error: %v", err)
 	}
 
-	functions := []Function{
-		{
-			Exec: "../testdata/clean-metadata",
-		},
-		{
-			Image: "gcr.io/kpt-fn/set-labels:v0.1",
-			ConfigMap: map[string]string{
-				"env":      "dev",
-				"app-name": "my-app",
-			},
-		},
-	}
+	functions := getFns()
 	err = executeFn.addFunctions(functions...)
 	err = executeFn.setExecWorkingDir("../testdata")
 	if err != nil {

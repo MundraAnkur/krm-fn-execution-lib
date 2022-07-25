@@ -8,18 +8,7 @@ import (
 )
 
 func TestRunFnRunner(t *testing.T) {
-	functions := []Function{
-		{
-			Exec: "../testdata/clean-metadata",
-		},
-		{
-			Image: "gcr.io/kpt-fn/set-labels:v0.1",
-			ConfigMap: map[string]string{
-				"env":      "dev",
-				"app-name": "my-app",
-			},
-		},
-	}
+	functions := getFns()
 
 	temp := unstructured.Unstructured{}
 	jsonValue, err := yaml.YAMLToJSON([]byte(exampleService))
@@ -30,7 +19,6 @@ func TestRunFnRunner(t *testing.T) {
 
 	runner := NewRunner().
 		WithInputs(&temp).
-		WithInput([]byte(exampleDeployment)).
 		WithFunctions(functions...).
 		WhereExecWorkingDir("/usr")
 
@@ -50,5 +38,57 @@ func TestRunFnRunner(t *testing.T) {
 		"tier":     "frontend",
 		"app":      "guestbook",
 	}
-	assert.EqualValues(t, expectedLabels, OutRl.Items[1].(*unstructured.Unstructured).GetLabels())
+	assert.EqualValues(t, expectedLabels, OutRl.Items[0].(*unstructured.Unstructured).GetLabels())
+}
+
+func getFns() []Function {
+	functions := []Function{
+		{
+			Name:  "Clean Resources",
+			Image: "mundrankur/clean-resource:v0.2",
+		},
+		{
+			Name:  "Set Labels",
+			Image: "gcr.io/kpt-fn/set-labels:v0.1",
+			ConfigMap: map[string]string{
+				"env":      "dev",
+				"app-name": "my-app",
+			},
+		},
+		{
+			Name: "Clean Metadata",
+			Exec: "../testdata/clean-metadata",
+		},
+	}
+	return functions
+}
+
+func TestRunner_WithInputs(t *testing.T) {
+	// test with empty input
+	runner := NewRunner().WithFunctions(getFns()...)
+	_, err := runner.Build()
+	assert.EqualValues(t, "input is required", err.Error())
+
+	// expected input and function to be executed
+	in := unstructured.Unstructured{}
+	json, err := yaml.YAMLToJSON([]byte(exampleDeployment))
+	err = in.UnmarshalJSON(json)
+	if err != nil {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	fnRunner, err := runner.WithInput([]byte(exampleService)).WithInputs(&in).Build()
+	if err != nil {
+		assert.Fail(t, "Runner failed while build", err)
+	}
+	_, err = fnRunner.Execute()
+	if err != nil {
+		assert.Fail(t, "Unexpected Error: %v", err)
+	}
+
+	// Provide a list object that implements runtime.Objects
+	lst := unstructured.UnstructuredList{}
+	lst.Items = append(lst.Items, in)
+	fnRunner, err = runner.WithInputs(&lst).Build()
+	assert.EqualValues(t, "unsupported input of type List", err.Error())
 }

@@ -8,17 +8,20 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sigs.k8s.io/kustomize/kyaml/errors"
 	"sigs.k8s.io/kustomize/kyaml/fn/runtime/runtimeutil"
 	"sigs.k8s.io/kustomize/kyaml/runfn"
 	kyaml "sigs.k8s.io/kustomize/kyaml/yaml"
 	"sigs.k8s.io/yaml"
+	"strings"
 )
 
 type executeFn struct {
-	input     *bytes.Buffer
-	functions []*kyaml.RNode
-	execDir   string
+	input         *bytes.Buffer
+	functionNames []string
+	functions     []*kyaml.RNode
+	execDir       string
 }
 
 func (e *executeFn) Execute() (ResourceList, error) {
@@ -51,7 +54,7 @@ func (e *executeFn) Execute() (ResourceList, error) {
 	if err != nil {
 		return rl, errors.Wrap(err)
 	}
-	rl, err = GetResourceList(out.String(), resultDir)
+	rl, err = GetResourceList(out.String(), resultDir, e.functionNames)
 	return rl, err
 }
 
@@ -71,17 +74,20 @@ func (e *executeFn) addInput(resource []byte) error {
 
 func (e *executeFn) addInputs(inputs ...runtime.Object) error {
 	for _, input := range inputs {
-		value, err := yaml.Marshal(input)
-		err = e.addInput(value)
-		if err != nil {
-			return errors.Wrap(err)
+		if strings.Contains(reflect.TypeOf(input).String(), "List") {
+			return fmt.Errorf("unsupported input of type List")
+		} else {
+			value, err := yaml.Marshal(input)
+			if err = e.addInput(value); err != nil {
+				return errors.Wrap(err)
+			}
 		}
 	}
 	return nil
 }
 
 func (e *executeFn) addFunctions(functions ...Function) error {
-	functionConfig, err := getFunctionConfig(functions)
+	functionConfig, err := e.getFunctionConfig(functions)
 	if err != nil {
 		return errors.Wrap(err)
 	}
@@ -112,9 +118,13 @@ func (e *executeFn) setExecWorkingDir(dir string) error {
 }
 
 // getFunctionsToExecute parses the explicit functions to run.
-func getFunctionConfig(functions []Function) ([]*kyaml.RNode, error) {
+func (e *executeFn) getFunctionConfig(functions []Function) ([]*kyaml.RNode, error) {
 	var functionConfig []*kyaml.RNode
 	for _, fn := range functions {
+		if fn.Name == "" {
+			return nil, fmt.Errorf("function must have a name")
+		}
+		e.functionNames = append(e.functionNames, fn.Name)
 		res, err := buildFnConfigResource(fn)
 		if err != nil {
 			return nil, errors.Wrap(err)

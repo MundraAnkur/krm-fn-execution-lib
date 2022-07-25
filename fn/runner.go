@@ -30,6 +30,9 @@ func (r Runner) WithFunctions(function ...Function) RunnerBuilder {
 }
 
 func (r Runner) WithInputs(objects ...runtime.Object) RunnerBuilder {
+	if objects == nil {
+		return r
+	}
 	err := r.executeFn.addInputs(objects...)
 	appendError(err)
 	return r
@@ -42,6 +45,15 @@ func (r Runner) WhereExecWorkingDir(dir string) RunnerBuilder {
 }
 
 func (r Runner) Build() (FunctionRunner, error) {
+	if runnerErr != nil {
+		return nil, runnerErr
+	}
+	if r.executeFn.input == nil {
+		return nil, fmt.Errorf("input is required")
+	}
+	if len(r.executeFn.functions) == 0 {
+		return nil, fmt.Errorf("atleast one function is required")
+	}
 	return &r.executeFn, runnerErr
 }
 

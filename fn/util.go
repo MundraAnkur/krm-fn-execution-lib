@@ -16,8 +16,9 @@ import (
 
 var itemSeparator = "---\n"
 
-func GetResourceList(content string, resultDir string) (ResourceList, error) {
-	var rl ResourceList
+func GetResourceList(content string, resultDir string, names []string) (ResourceList, error) {
+	rl := ResourceList{}
+	rl.Results = make(map[string]framework.Result)
 
 	items, err := cleanOutput(content)
 	if err != nil {
@@ -43,11 +44,15 @@ func GetResourceList(content string, resultDir string) (ResourceList, error) {
 	}
 
 	for _, resultFile := range resultFiles {
+		fileName := strings.TrimSuffix(resultFile.Name(), ".yaml")
+		fileNo := 0
+		_, err := fmt.Sscan(strings.SplitN(fileName, "-", 2)[1], &fileNo)
 		result, err := readFile(resultDir + "/" + resultFile.Name())
 		if err != nil {
 			return rl, errors.Wrap(err)
 		}
-		rl.Results = append(rl.Results, result...)
+
+		rl.Results[names[fileNo]] = *result[0]
 	}
 
 	return rl, nil
